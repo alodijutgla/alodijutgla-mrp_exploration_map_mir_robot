@@ -5,6 +5,7 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <string>
 
 using namespace std;
 
@@ -15,7 +16,7 @@ public:
     Map(vector<int> map_data, int width)
             : map_data_(map_data), width_(width)
     {
-
+   cout << "Created mapp with width:" + to_string(width) <<endl;
     }
 
 
