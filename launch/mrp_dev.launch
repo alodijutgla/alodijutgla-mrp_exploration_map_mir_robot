@@ -2,6 +2,8 @@
 <launch>
     <param name="use_sim_time"  value="true"/>
     <include file="$(find mir_gazebo)/launch/mir_maze_world.launch"> </include>
+    <node pkg="rosservice" type="rosservice" name="global_loc" args="call --wait /gazebo/unpause_physics" />
+
 
     <!-- search: start the search tast -->
     <node name="search" pkg="mrp_exploration_map_mir_robot" type="search" output="screen" />
