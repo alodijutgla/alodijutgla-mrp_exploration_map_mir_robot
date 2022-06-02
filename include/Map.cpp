@@ -33,6 +33,12 @@ public:
         return map_data_[x + y * width_] == 1;
     }
 
+// option to check if the robot was alread there
+// should be stored somehow in the map
+ bool alreadyExplored(int x, int y)
+    {
+        return map_data_[x + y * width_] == 99;
+    }
 
 
 

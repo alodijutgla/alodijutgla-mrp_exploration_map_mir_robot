@@ -27,11 +27,14 @@ public:
         int direction;
         int option;
         int direction_old;
+
+        cout << "Robot startet exploration " << endl;
+
         switch (state)
         {
             // move to first wall
         case 0:
-
+            cout << "Robot entered state " + to_string(state) << endl;
             direction = moveToWall();
             // state = 1;
 
@@ -39,7 +42,7 @@ public:
 
             // follow wall
         case 1:
-
+            cout << "Robot entered state " + to_string(state) << endl;
             // option 1 wall crossing
             // option 2 wall ending in free space
             option = followWall(direction);
@@ -50,18 +53,69 @@ public:
             }
             else if (option = 2)
             {
-                state = 2;
+                state = 3;
+            }
+            else if (option = 3)
+            {
+                state = 4;
             }
 
             break;
 
             // change with wall direction
         case 2:
-
+            cout << "Robot entered state " + to_string(state) << endl;
             direction_old = direction;
             direction = newDirection(direction);
             switchRotation(direction_old, direction);
             state = 1;
+            break;
+
+            // check if there is only a passage or if the wall really ends there
+        case 3:
+            cout << "Robot entered state " + to_string(state) << endl;
+            if (checkGap(direction, Wall))
+            {
+                // follow the wall further
+                state = 1;
+                cout << "Robot passed gap and moved on " << endl;
+            }
+            else
+            {
+                // follow the wall on to the other side
+                state = 1;
+                cout << "Robot moved around the wall " << endl;
+            }
+
+            break;
+
+            // going to points in the vector
+        case 4:
+            cout << "Robot entered state " + to_string(state) << endl;
+
+            if (storedPos.empty())
+            {
+                // exploration finished
+                return;
+            }
+            else
+            {
+                // get new position from vektor
+                // rotate robot correctly and move then to this position
+
+                switchRotation(direction, storedDirect.back());
+                direction = storedDirect.back();
+                send_goal(storedPos.back().first, storedPos.back().second, 0);
+
+                Wall.first = storedWallPos.back().first;
+                Wall.second = storedWallPos.back().second;
+
+                storedPos.pop_back();
+                storedDirect.pop_back();
+                // follow the new wall again
+                state = 1;
+            }
+
             break;
 
         default:
@@ -71,6 +125,7 @@ public:
 
     void rotate(int deg)
     {
+        cout << "Robot rotate " << endl;
         send_goal(act_x, act_y, deg);
     }
 
@@ -82,8 +137,68 @@ private:
 
     pair<int, int> Wall;
 
+    vector<int> storedDirect;
+    vector<pair<int, int>> storedPos;
+    vector<pair<int, int>> storedWallPos;
+
     int state;
     int seq_goal = 0; // sequence id of goal
+
+    // check if the wall continues after a few squares or if it ends completly
+    bool checkGap(int direction, pair<int, int> startWall)
+    {
+
+        // direction is exactly the oposite side as when moving in direction off a crossing wall
+        int passGapDirection;
+        switch (newDirection(direction))
+        {
+        case 1:
+            passGapDirection = 2;
+            break;
+        case 2:
+            passGapDirection = 1;
+            break;
+        case 3:
+            passGapDirection = 4;
+            break;
+        case 4:
+            passGapDirection = 3;
+            break;
+
+        default:
+            passGapDirection = -1;
+            break;
+        }
+
+        // move robot one step so that he is not near to a wall anymore
+        pair<int, int> oneStep = getCordinates(direction, act_x, act_y);
+        send_goal(oneStep.first, oneStep.second, 0);
+
+        for (int i = 0; i < 10; i++)
+        {
+
+            pair<int, int> checkWall = startWall;
+            pair<int, int> rPosAfterGap = make_pair(act_x, act_y);
+
+            if (map_.isWall(checkWall.first, checkWall.second))
+            {
+                // store gap pos and move over the gap
+                storedPos.push_back(startWall);
+                storedDirect.push_back(passGapDirection);
+                send_goal(rPosAfterGap.first, rPosAfterGap.second, 0);
+
+                return true;
+            }
+
+            rPosAfterGap = getCordinates(direction, rPosAfterGap.first, rPosAfterGap.second);
+            checkWall = getCordinates(direction, checkWall.first, checkWall.second);
+        }
+        // not a gap so wall need to removed from vector
+        storedWallPos.pop_back();
+        // move in the gap not working if the gap is only one square
+        switchRotation(direction, passGapDirection);
+        return false;
+    }
 
     // 1 positiv x
     // 2 negativ x
@@ -148,11 +263,13 @@ private:
     // follow the wall as long she goes straigth
     // if wall is ending because a crossing wall return 1
     // if wall is ending in free space return 2
+    // if robot was already at that point stopp and return 3
     int followWall(int direction)
     {
         // set new robot cordinates diretly one in frnt because one square is maybe not enough to turn
         pair<int, int> newRobotCord = getCordinates(direction, act_x, act_y);
         pair<int, int> newRobotCord_old;
+        pair<int, int> Wall_old = Wall;
         while (true)
         {
 
@@ -168,11 +285,21 @@ private:
             else if (!map_.isWall(Wall.first, Wall.second))
             {
                 cout << "Wall is ending" << endl;
+                // store already last wall position
+                // will be removed if not a gap
+                storedWallPos.push_back(Wall_old);
                 return 2;
                 break;
             }
             send_goal(newRobotCord_old.first, newRobotCord_old.second, 0);
             newRobotCord_old = newRobotCord;
+            Wall_old = Wall;
+
+            if (map_.alreadyExplored(newRobotCord.first, newRobotCord.second))
+            {
+                return 3;
+                break;
+            }
         }
     }
 
@@ -225,6 +352,8 @@ private:
         default:
             break;
         }
+        // fault
+        return -1;
     }
 
     // 1 positiv x
@@ -253,6 +382,8 @@ private:
         default:
             break;
         }
+        // fault
+        return make_pair(-1, -1);
     }
 
     // move near to the next wall
@@ -262,6 +393,7 @@ private:
         float x = act_x;
         float y = act_y;
         // rotate about 360°
+
         rotate(360);
 
         cout << "Robot startet at x: " + to_string(act_x) + " And Y: " + to_string(act_y);
@@ -334,8 +466,10 @@ private:
             // wall not found move in x positive direction
             else
             {
+
                 act_x = act_x + 5;
-                send_goal(act_x, 0, 0);
+                send_goal(act_x, act_y, 0);
+                cout << "No Wall found send Robot to x: " + to_string(act_x) + " y: " + to_string(act_y);
                 rotate(360);
             }
         }
@@ -457,12 +591,13 @@ private:
         return false;
     }
 
-    // send a goal to the robot
+    // // send a goal to the robot
     bool send_goal(float x, float y, float rotation)
     {
         // Move the robot with the help of an action client. Goal positions are
         // transmitted to the robot and feedback is given about the actual
         // driving state of the robot.
+        cout << "Send Robot to " + to_string(x) + " And Y: " + to_string(y) + " with rotation: " + to_string(rotation);
 
         actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> ac("move_base", true);
         while (!ac.waitForServer(ros::Duration(10.0)))
